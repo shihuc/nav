@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  
+       xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"  
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"  
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://mybatis.org/schema/mybatis-spring http://mybatis.org/schema/mybatis-spring.xsd  
+       http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+       http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+       http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd">
+
+    <!--数据源加密操作-->
+	<bean id="myPasswordCallback" class="com.shihuc.up.infra.mysql.PasswordCallback" lazy-init="true"/>
+    <!--数据库连接-->
+    <bean id="master" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close" primary="true">
+	    <property name="url" value="${dataSource.mysql.src-url}" />
+	    <property name="username" value="${dataSource.mysql.src-username}"/>
+	    <property name="password" value="${dataSource.mysql.src-password}"/>
+	    <!-- 配置初始化大小、最小、最大 -->
+	    <property name="initialSize"><value>${dataSource.mysql.initialSize}</value></property>
+	    <property name="maxActive"><value>${dataSource.mysql.maxActive}</value></property>
+	    <property name="minIdle"><value>${dataSource.mysql.minIdle}</value></property>
+	    <!-- 配置获取连接等待超时的时间 -->
+	    <property name="maxWait"><value>${dataSource.mysql.maxWait}</value></property>
+	    <!-- 配置监控统计拦截的filters -->
+	    <property name="filters"><value>stat</value></property>
+	    <!-- 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒 -->
+	    <property name="timeBetweenEvictionRunsMillis"><value>${dataSource.mysql.timeBetweenEvictionRunsMillis}</value></property>
+	    <!-- 配置一个连接在池中最小生存的时间，单位是毫秒 -->
+	    <property name="minEvictableIdleTimeMillis"><value>${dataSource.mysql.minEvictableIdleTimeMillis}</value></property>
+	    <!-- 配置连接中的密码信息 -->
+	    <property name="connectionProperties" value="password=${dataSource.mysql.src-password}"/>
+	    <!-- 调用密码回调，进行解密 -->
+        <property name="passwordCallback" ref="myPasswordCallback"/>
+	    <!--
+	    <property name="validationQuery"><value>SELECT 'x'</value></property>
+	    <property name="testWhileIdle"><value>true</value></property>
+	    <property name="testOnBorrow"><value>false</value></property>
+	    <property name="testOnReturn"><value>false</value></property>
+	    <property name="poolPreparedStatements"><value>true</value></property>
+	    <property name="maxOpenPreparedStatements"><value>20</value></property>
+	     -->
+ 	</bean>
+
+    <!-- ========================================针对myBatis的配置项============================== -->
+    <!-- 配置sqlSessionFactory -->
+    <bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <!-- 扫描com.jersey.dao.mapper这个包以及它的子包下的所有映射接口类 -->
+        <property name="basePackage" value="com.shihuc.up.nav.*" />
+        <property name="sqlSessionFactoryBeanName" value="masterSqlSessionFactory" />
+    </bean>
+    <!-- 配置扫描器 -->
+    <bean id="masterSqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <!--  实例化sqlSessionFactory时需要使用上述配置好的数据源以及SQL映射文件 -->
+        <property name="dataSource" ref="master" />
+        <property name="mapperLocations" value="classpath:mybatis/**/*.xml"/>
+    </bean>
+<!-- ========================================分隔线========================================= -->
+    <!-- 配置Spring的事务管理器 -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="master" />
+    </bean>
+
+    <!-- 注解方式配置事物 -->
+    <!-- <tx:annotation-driven transaction-manager="transactionManager" /> -->
+
+    <!-- 拦截器方式配置事物 -->
+    <tx:advice id="transactionAdvice" transaction-manager="transactionManager">
+        <tx:attributes>
+            <tx:method name="add*" propagation="REQUIRED" />
+            <tx:method name="append*" propagation="REQUIRED" />
+            <tx:method name="insert*" propagation="REQUIRED" />
+            <tx:method name="save*" propagation="REQUIRED" />
+            <tx:method name="update*" propagation="REQUIRED" />
+            <tx:method name="modify*" propagation="REQUIRED" />
+            <tx:method name="edit*" propagation="REQUIRED" />
+            <tx:method name="delete*" propagation="REQUIRED" />
+            <tx:method name="remove*" propagation="REQUIRED" />
+            <tx:method name="repair" propagation="REQUIRED" />
+            <tx:method name="delAndRepair" propagation="REQUIRED" />
+
+            <tx:method name="get*" propagation="SUPPORTS" />
+            <tx:method name="find*" propagation="SUPPORTS" />
+            <tx:method name="load*" propagation="SUPPORTS" />
+            <tx:method name="search*" propagation="SUPPORTS" />
+            <tx:method name="datagrid*" propagation="SUPPORTS" />
+
+            <tx:method name="*" propagation="SUPPORTS" />
+        </tx:attributes>
+    </tx:advice>
+    <aop:config>
+        <aop:pointcut id="transactionPointcut" expression="execution(* com.shihuc.up.nav.*.*.service.impl.*.*(..))" />
+        <aop:advisor pointcut-ref="transactionPointcut" advice-ref="transactionAdvice" />
+    </aop:config>
+
+    <!-- 配置druid监控spring jdbc -->
+    <bean id="druid-stat-interceptor" class="com.alibaba.druid.support.spring.stat.DruidStatInterceptor">
+    </bean>
+    <bean id="druid-stat-pointcut" class="org.springframework.aop.support.JdkRegexpMethodPointcut" scope="prototype">
+        <property name="patterns">
+            <list>
+                <value>com.shihuc.up.nav.*</value>
+            </list>
+        </property>
+    </bean>
+    <aop:config>
+        <aop:advisor advice-ref="druid-stat-interceptor" pointcut-ref="druid-stat-pointcut" />
+    </aop:config>
+</beans>
